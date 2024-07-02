@@ -6,7 +6,8 @@ import pandas as pd
 def merge_transcriptom_data_to_raw_hospital(transcriptome_dataset: pd.DataFrame,
                                             raw_hospital_dataset: pd.DataFrame,
                                             filter_transcriptome_dataset_by_col: Optional[str] = "Transcriptom",
-                                            transcriptome_dataset_patient_id_col_name: Optional[str] = "PID") -> pd.DataFrame:
+                                            transcriptome_dataset_patient_id_col_name: Optional[
+                                                str] = "PID") -> pd.DataFrame:
     dataset = transcriptome_dataset
     if filter_transcriptome_dataset_by_col is not None:
         dataset = transcriptome_dataset[transcriptome_dataset[filter_transcriptome_dataset_by_col].fillna(False)]
@@ -21,7 +22,8 @@ def merge_transcriptom_data_to_raw_hospital(transcriptome_dataset: pd.DataFrame,
     fish_cols = [col for col in raw_hospital_dataset.columns if
                  "t(" in col or "del(" in col or col in ['1q21+', 'IGH rearrangement',
                                                          'Cytogenetics Risk (0=standard risk, 1=single hit, 2=2+ hits)']]
-    post_treatment_data = raw_hospital_dataset[raw_hospital_dataset["Time"] != "Post"][ #TODO not good to throw "Post", nned maybe
+    post_treatment_data = raw_hospital_dataset[raw_hospital_dataset["Time"] != "Post"][
+        # TODO not good to throw "Post", nned maybe
         ["Code"] + post_treatment_cols + fish_cols].set_index("Code")
     dataset = dataset.merge(post_treatment_data, how="left", left_index=True, right_index=True, validate="one_to_one")
 
@@ -54,3 +56,52 @@ def generate_refracrotines_dataset(dataset: pd.DataFrame, treatment: str, non_re
     y = pd.concat([ref_mask[ref_mask].astype(int), non_ref_mask[non_ref_mask].astype(int) - 1])
 
     return X, y
+
+
+def add_response_columns(dataset: pd.DataFrame, treatment: str,
+                         response_policy: str, no_response_policy: str,
+                         coding: Optional[dict] = None) -> pd.DataFrame:
+    df = dataset.copy()
+    if coding is None:
+        coding = {
+            "response": "R",
+            "no_response": "NR",
+            "no_data": None
+        }
+
+    # no_response_policy like 'pre_exposed|post_refractory'
+    no_response_mask = pd.Series([False] * len(df), index=df.index)
+    if 'pre_exposed' in no_response_policy:
+        pre_exposed_mask = df[treatment] == 2 | df[treatment] == 1
+        no_response_mask = no_response_mask | pre_exposed_mask
+    elif 'pre_refractory' in no_response_mask:
+        pre_refractory_mask = df[treatment] == 2
+        no_response_mask = no_response_mask | pre_refractory_mask
+    if 'post_refractory' in no_response_policy:
+        post_refractory_mask = df[f"{treatment}.2"] == 2
+        no_response_mask = no_response_mask | post_refractory_mask
+    assert sum(no_response_mask) > 0, f"no patients follow no response policy for treatment: {treatment}"
+
+    # response_policy like 'NDMM_SMM_MGUS|post_sensitive|not_exposed'
+    response_mask = pd.Series([False] * len(df), index=df.index)
+    if 'NDMM_SMM' in response_policy:
+        NDMM_mask = df["Stage"].apply(lambda x: x in [1, 2])
+        response_mask = response_mask | NDMM_mask
+    if 'post_sensitive' in response_policy:
+        post_sensitive = dataset[f"{treatment}.2"] == 4
+        response_mask = response_mask | post_sensitive
+    if 'not_exposed' in response_policy:
+        not_exposed_mask = df[treatment].isna()
+        response_mask = response_mask | not_exposed_mask
+    assert sum(response_mask) > 0, f"no patients follow response policy for treatment: {treatment}"
+
+    assert sum(response_mask & no_response_mask) == 0,\
+        f"some patients follow both response and no response policies for treatment: {treatment}"
+
+    response_series = pd.Series([coding["no_data"]] * len(df), index=df.index)
+    response_series[response_mask] = coding["response"]
+    response_series[no_response_mask] = coding["no_response"]
+
+    df[f"{treatment}_response"] = response_series
+
+    return df
