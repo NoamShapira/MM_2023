@@ -3,3 +3,4 @@ pandas
 omegaconf
 leidenalg
 pyreadr
+scipy=1.12.0

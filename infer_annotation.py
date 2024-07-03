@@ -179,7 +179,7 @@ def process_pc_population(config, adata, save_only_pc_path: Optional[Path] = Non
             return only_pc_adata
 
 
-def infer_annotation_of_unlabeled_cells(config, on_adata: Optional[ad.AnnData], save_path=None):
+def infer_annotation_of_unlabeled_cells(config, on_adata: Optional[ad.AnnData] = None, save_path=None):
     if on_adata is None:
         adata = load_pp_adata_after_norm_and_hvg(config)
     else:
