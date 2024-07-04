@@ -1,3 +1,4 @@
+import warnings
 from typing import List, Optional
 
 import pandas as pd
@@ -82,13 +83,13 @@ def add_response_columns_to_drug_combination(dataset: pd.DataFrame, combination:
         exposed_non_refractory_mask = df[f"{combination} Ref."] != 1 & df[f"{combination} Exp."] != 1
         response_mask = response_mask | exposed_non_refractory_mask
     if 'NDMM_SMM' in response_policy:
-        NDMM_mask = df["Stage"].apply(lambda x: x in [1, 2])
+        NDMM_mask = df['Disease Stage (MGUS=0, SMM=1, NDMM=2, RRMM=3, None=4)'].apply(lambda x: x in [1, 2])
         response_mask = response_mask | NDMM_mask
 
-    assert sum(no_response_mask) > 0, f"no patients follow no response policy for treatment: {combination}"
-    assert sum(response_mask) > 0, f"no patients follow response policy for treatment: {combination}"
+    assert sum(no_response_mask) > 0, f"no patients follow no response policy for combination: {combination}"
+    assert sum(response_mask) > 0, f"no patients follow response policy for combination: {combination}"
     assert sum(response_mask & no_response_mask) == 0, \
-        f"some patients follow both response and no response policies for treatment: {combination}"
+        f"some patients follow both response and no response policies for combination: {combination}"
 
     response_series = pd.Series([coding["no_data"]] * len(df), index=df.index)
     response_series[response_mask] = coding["response"]
@@ -111,14 +112,14 @@ def add_response_columns_to_specific_treatment(dataset: pd.DataFrame, treatment:
     if 'pre_exposed' in no_response_policy:
         pre_exposed_mask = df[treatment] == 2 | df[treatment] == 1
         no_response_mask = no_response_mask | pre_exposed_mask
-    elif 'pre_refractory' in no_response_mask:
+    elif 'pre_refractory' in no_response_policy:
         pre_refractory_mask = df[treatment] == 2
         no_response_mask = no_response_mask | pre_refractory_mask
 
     if 'last_line_exposed' in no_response_policy:
         last_line_exposed_mask = df[f"{treatment}.1"] == 2 | df[f"{treatment}.1"] == 1
         no_response_mask = no_response_mask | last_line_exposed_mask
-    elif 'last_line_refractory' in no_response_mask:
+    elif 'last_line_refractory' in no_response_policy:
         last_line_refractory_mask = df[f"{treatment}.1"] == 2
         no_response_mask = no_response_mask | last_line_refractory_mask
 
@@ -129,7 +130,7 @@ def add_response_columns_to_specific_treatment(dataset: pd.DataFrame, treatment:
     # response_policy like 'NDMM_SMM|post_sensitive|not_exposed'
     response_mask = pd.Series([False] * len(df), index=df.index)
     if 'NDMM_SMM' in response_policy:
-        NDMM_mask = df["Stage"].apply(lambda x: x in [1, 2])
+        NDMM_mask = df['Disease Stage (MGUS=0, SMM=1, NDMM=2, RRMM=3, None=4)'].apply(lambda x: x in [1, 2])
         response_mask = response_mask | NDMM_mask
     if 'post_sensitive' in response_policy:
         post_sensitive = dataset[f"{treatment}.2"] == 4
@@ -140,8 +141,11 @@ def add_response_columns_to_specific_treatment(dataset: pd.DataFrame, treatment:
 
     assert sum(no_response_mask) > 0, f"no patients follow no response policy for treatment: {treatment}"
     assert sum(response_mask) > 0, f"no patients follow response policy for treatment: {treatment}"
-    assert sum(response_mask & no_response_mask) == 0, \
-        f"some patients follow both response and no response policies for treatment: {treatment}"
+    if sum(response_mask & no_response_mask) != 0:
+        warn = f"some patients follow both response and no response policies for treatment: {treatment}\n" \
+               f"will consider them as non responders\n\n" \
+               f"{df[response_mask & no_response_mask][['Hospital.Code', 'Biopsy.Sequence', 'CD45', 'PC', 'Disease', 'Project', 'Cohort', 'Method', 'Disease Stage (MGUS=0, SMM=1, NDMM=2, RRMM=3, None=4)', f'{treatment}.2', f'{treatment}']]} "
+        warnings.warn(warn)
 
     response_series = pd.Series([coding["no_data"]] * len(df), index=df.index)
     response_series[response_mask] = coding["response"]
