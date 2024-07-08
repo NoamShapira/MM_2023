@@ -80,7 +80,7 @@ def add_response_columns_to_drug_combination(dataset: pd.DataFrame, combination:
 
     response_mask = pd.Series([False] * len(df), index=df.index)
     if 'exposed_non_refractory' in response_policy:
-        exposed_non_refractory_mask = df[f"{combination} Ref."] != 1 & df[f"{combination} Exp."] != 1
+        exposed_non_refractory_mask = (df[f"{combination} Ref."] != 1) & (df[f"{combination} Exp."] == 1)
         response_mask = response_mask | exposed_non_refractory_mask
     if 'NDMM_SMM' in response_policy:
         NDMM_mask = df['Disease Stage (MGUS=0, SMM=1, NDMM=2, RRMM=3, None=4)'].apply(lambda x: x in [1, 2])
@@ -141,16 +141,19 @@ def add_response_columns_to_specific_treatment(dataset: pd.DataFrame, treatment:
 
     assert sum(no_response_mask) > 0, f"no patients follow no response policy for treatment: {treatment}"
     assert sum(response_mask) > 0, f"no patients follow response policy for treatment: {treatment}"
-    if sum(response_mask & no_response_mask) != 0:
-        warn = f"some patients follow both response and no response policies for treatment: {treatment}\n" \
-               f"will consider them as non responders\n\n" \
-               f"{df[response_mask & no_response_mask][['Hospital.Code', 'Biopsy.Sequence', 'CD45', 'PC', 'Disease', 'Project', 'Cohort', 'Method', 'Disease Stage (MGUS=0, SMM=1, NDMM=2, RRMM=3, None=4)', f'{treatment}.2', f'{treatment}']]} "
-        warnings.warn(warn)
 
     response_series = pd.Series([coding["no_data"]] * len(df), index=df.index)
     response_series[response_mask] = coding["response"]
     response_series[no_response_mask] = coding["no_response"]
 
     df[f"{treatment}_response"] = response_series
+    if sum(response_mask & no_response_mask) != 0:
+        cols_to_print = ['Hospital.Code', 'Biopsy.Sequence', 'CD45', 'PC', 'Disease', 'Project', 'Cohort', 'Method',
+                         f'{treatment}', f'{treatment}.2', f"{treatment}_response",
+                         'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None)']
+        warn = f"some patients follow both response and no response policies for treatment: {treatment}\n" \
+               f"will consider them as non responders\n\n" \
+               f"{df[response_mask & no_response_mask][cols_to_print]} "
+        warnings.warn(warn)
 
     return df
