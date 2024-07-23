@@ -68,7 +68,8 @@ DEFAULT_RESPONSE_CODING = {
 
 def add_response_columns_to_drug_combination(dataset: pd.DataFrame, combination: str,
                                              response_policy: str, no_response_policy: str,
-                                             coding: Optional[dict] = None) -> pd.DataFrame:
+                                             coding: Optional[dict] = None,
+                                             raise_errors=True) -> pd.DataFrame:
     df = dataset.copy()
     if coding is None:
         coding = DEFAULT_RESPONSE_CODING
@@ -83,13 +84,15 @@ def add_response_columns_to_drug_combination(dataset: pd.DataFrame, combination:
         exposed_non_refractory_mask = (df[f"{combination} Ref."] != 1) & (df[f"{combination} Exp."] == 1)
         response_mask = response_mask | exposed_non_refractory_mask
     if 'NDMM_SMM' in response_policy:
-        NDMM_mask = df['Disease Stage (MGUS=0, SMM=1, NDMM=2, RRMM=3, None=4)'].apply(lambda x: x in [1, 2])
+        # NDMM_mask = df['Disease Stage (MGUS=0, SMM=1, NDMM=2, RRMM=3, None=4)'].apply(lambda x: x in [1, 2])
+        NDMM_mask = df['Disease'].apply(lambda x: x in ['NDMM', 'SMM'])
         response_mask = response_mask | NDMM_mask
 
-    assert sum(no_response_mask) > 0, f"no patients follow no response policy for combination: {combination}"
-    assert sum(response_mask) > 0, f"no patients follow response policy for combination: {combination}"
-    assert sum(response_mask & no_response_mask) == 0, \
-        f"some patients follow both response and no response policies for combination: {combination}"
+    if raise_errors:
+        assert sum(no_response_mask) > 0, f"no patients follow no response policy for combination: {combination}"
+        assert sum(response_mask) > 0, f"no patients follow response policy for combination: {combination}"
+        assert sum(response_mask & no_response_mask) == 0, \
+            f"some patients follow both response and no response policies for combination: {combination}"
 
     response_series = pd.Series([coding["no_data"]] * len(df), index=df.index)
     response_series[response_mask] = coding["response"]
@@ -102,7 +105,8 @@ def add_response_columns_to_drug_combination(dataset: pd.DataFrame, combination:
 
 def add_response_columns_to_specific_treatment(dataset: pd.DataFrame, treatment: str,
                                                response_policy: str, no_response_policy: str,
-                                               coding: Optional[dict] = None) -> pd.DataFrame:
+                                               coding: Optional[dict] = None,
+                                               raise_errors=True) -> pd.DataFrame:
     df = dataset.copy()
     if coding is None:
         coding = DEFAULT_RESPONSE_CODING
@@ -130,17 +134,20 @@ def add_response_columns_to_specific_treatment(dataset: pd.DataFrame, treatment:
     # response_policy like 'NDMM_SMM|post_sensitive|not_exposed'
     response_mask = pd.Series([False] * len(df), index=df.index)
     if 'NDMM_SMM' in response_policy:
-        NDMM_mask = df['Disease Stage (MGUS=0, SMM=1, NDMM=2, RRMM=3, None=4)'].apply(lambda x: x in [1, 2])
+        # NDMM_mask = df['Disease Stage (MGUS=0, SMM=1, NDMM=2, RRMM=3, None=4)'].apply(lambda x: x in [1, 2])
+        NDMM_mask = df['Disease'].apply(lambda x: x in ['NDMM', 'SMM'])
         response_mask = response_mask | NDMM_mask
     if 'post_sensitive' in response_policy:
         post_sensitive = dataset[f"{treatment}.2"] == 4
-        response_mask = response_mask | post_sensitive
+        treated_alone_mask = (~ dataset[dataset.columns[dataset.columns.str.contains("\.2")]].isna()).sum(axis=1) == 1
+        response_mask = response_mask | (post_sensitive & treated_alone_mask)
     if 'not_exposed' in response_policy:
         not_exposed_mask = df[treatment].isna()
         response_mask = response_mask | not_exposed_mask
 
-    assert sum(no_response_mask) > 0, f"no patients follow no response policy for treatment: {treatment}"
-    assert sum(response_mask) > 0, f"no patients follow response policy for treatment: {treatment}"
+    if raise_errors:
+        assert sum(no_response_mask) > 0, f"no patients follow no response policy for treatment: {treatment}"
+        assert sum(response_mask) > 0, f"no patients follow response policy for treatment: {treatment}"
 
     response_series = pd.Series([coding["no_data"]] * len(df), index=df.index)
     response_series[response_mask] = coding["response"]
