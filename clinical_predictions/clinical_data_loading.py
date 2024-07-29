@@ -158,6 +158,7 @@ def add_response_columns_to_specific_treatment(dataset: pd.DataFrame, treatment:
         cols_to_print = ['Hospital.Code', 'Biopsy.Sequence', 'CD45', 'PC', 'Disease', 'Project', 'Cohort', 'Method',
                          f'{treatment}', f'{treatment}.2', f"{treatment}_response",
                          'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None)']
+        cols_to_print = list(set(cols_to_print).intersection(df.columns))
         warn = f"some patients follow both response and no response policies for treatment: {treatment}\n" \
                f"will consider them as non responders\n\n" \
                f"{df[response_mask & no_response_mask][cols_to_print]} "
