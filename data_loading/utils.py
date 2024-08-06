@@ -77,10 +77,10 @@ def extract_samples_metadata(adata: ad.AnnData, metadata_cols, split_by_method=T
     return all_samples
 
 
-def get_updated_disease_col(meradata_df: pd.DataFrame, disease_col: str, hospital_disease_col: str, update_non_naive_NDMM: bool,
-                            remove_PRMM: bool, treatment_names: Optional[List[str]] = None,
+def get_updated_disease_col(metadata_df: pd.DataFrame, disease_col: str, hospital_disease_col: str,
+                            update_non_naive_NDMM: bool, remove_PRMM: bool, treatment_names: Optional[List[str]] = None,
                             non_naive_NDMM_value="non_naive_NDMM") -> pd.Series:
-    new_disease_col = meradata_df.apply(
+    new_disease_col = metadata_df.apply(
         lambda row: row[disease_col] if pd.isna(row[hospital_disease_col]) else row[hospital_disease_col], axis=1)
 
     if update_non_naive_NDMM:
@@ -89,11 +89,11 @@ def get_updated_disease_col(meradata_df: pd.DataFrame, disease_col: str, hospita
                                "Cyclophosphamide", "Chemotherapy", "Venetoclax", "Dexamethasone", "Prednisone",
                                "Daratumumab", "Elotuzumab", "Belantamab", "Talquetamab", "Teclistamab", "Cevostamab",
                                "Selinexor", "Auto-SCT", "CART", "BiTE-BCMA"]
-        non_naive_NDMM_mask = (new_disease_col == "NDMM") & (meradata_df[treatment_names].any(axis=1))
+        non_naive_NDMM_mask = (new_disease_col == "NDMM") & (metadata_df[treatment_names].any(axis=1))
         new_disease_col[non_naive_NDMM_mask] = non_naive_NDMM_value
 
     if remove_PRMM:
-        new_disease_col = meradata_df.apply(
+        new_disease_col = metadata_df.apply(
             lambda row: "RRMM" if row[disease_col] == "PRMM" else row[disease_col], axis=1)
 
     return new_disease_col

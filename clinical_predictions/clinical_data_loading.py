@@ -108,6 +108,7 @@ def add_response_columns_to_drug_combination(dataset: pd.DataFrame, combination:
 
 def load_and_process_clinical_data(clinical_data_path: Path, code_lower_case: bool, get_treatment_history: bool,
                                    get_hospital_stage: bool, get_post_treatment: bool,
+                                   additional_cols: Optional[List[str]] = None,
                                    treatment_names: Optional[List[str]] = None):
     clinical_data = load_dataframe_from_file(clinical_data_path)
     if code_lower_case:
@@ -137,6 +138,12 @@ def load_and_process_clinical_data(clinical_data_path: Path, code_lower_case: bo
     if get_post_treatment:
         requested_cols += [f"{treatment}.2" for treatment in treatment_names]
 
+    if additional_cols is not None:
+        for col in additional_cols:
+            if col not in clinical_data.columns:
+                raise ValueError(f"{col} is requested but not in clinical data")
+            else:
+                requested_cols.append(col)
     requested_clinical_data = clinical_data[requested_cols]
     return requested_clinical_data
 
