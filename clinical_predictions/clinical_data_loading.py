@@ -123,16 +123,29 @@ def load_and_process_clinical_data(clinical_data_path: Path, code_lower_case: bo
                            "Selinexor", "Auto-SCT", "CART", "BiTE-BCMA"]
 
     if get_hospital_stage:
-        hospital_stage_map = {0: 'NDMM',
-                              1: "RRMM",
-                              2: "SMM",
-                              3: "MGUS",
-                              4: "AL", 5: "AL",
-                              6: "MGUS", 7: "MGUS",
-                              8: None}
         hospital_stage = 'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None)'
-        clinical_data['Disease Stage Hospital'] = clinical_data[hospital_stage].map(hospital_stage_map)
-        requested_cols += ['Disease Stage Hospital']
+        generated_hospital_stage = 'Disease Stage Hospital'
+        if hospital_stage in clinical_data.columns:
+            hospital_stage_map = {0: 'NDMM',
+                                  1: "RRMM",
+                                  2: "SMM",
+                                  3: "MGUS",
+                                  4: "AL", 5: "AL",
+                                  6: "MGUS", 7: "MGUS",
+                                  8: None}
+        else:  # new version of clinical data
+            hospital_stage = 'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None, 10=Naïve_NDMM)'
+            hospital_stage_map = {0: 'NDMM',
+                                  1: "RRMM",
+                                  2: "SMM",
+                                  3: "MGUS",
+                                  4: "AL", 5: "AL",
+                                  6: "MGUS", 7: "MGUS",
+                                  8: None,
+                                  10: 'Naive_NDMM'}
+        clinical_data[generated_hospital_stage] = clinical_data[hospital_stage].map(hospital_stage_map)
+
+        requested_cols += [generated_hospital_stage]
     if get_treatment_history:
         requested_cols += treatment_names
     if get_post_treatment:
