@@ -16,9 +16,9 @@ def train_scvi_model(adata_train: ad.AnnData, counts_layer: str = "counts",
         layer=counts_layer,
         batch_key=batch_key,
     )
-    model = scvi.model.SCVI(adata_train, n_latent=20, n_layers=2, dropout_rate=0.2, deeply_inject_covariates=True)
+    model = scvi.model.SCVI(adata_train, n_latent=10, n_layers=2, dropout_rate=0.1, deeply_inject_covariates=True)
 
-    model.train(batch_size=256, early_stopping=True)
+    model.train(batch_size=512, max_epochs=250, plan_kwargs={"lr": 5e-3}, check_val_every_n_epoch=10)
     return model
 
 
