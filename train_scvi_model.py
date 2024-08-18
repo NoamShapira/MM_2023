@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union, Type, Dict
 
 import anndata as ad
 import scvi
@@ -9,16 +9,36 @@ from io_utils import generate_path_in_output_dir
 from sc_classification.var_genes import normalize_and_choose_genes, shuang_genes_to_keep
 
 
-def train_scvi_model(adata_train: ad.AnnData, counts_layer: str = "counts",
-                     batch_key: Optional[str] = None) -> scvi.model.SCVI:
-    scvi.model.SCVI.setup_anndata(
+def train_scvi_model(adata_train: ad.AnnData, counts_layer: str = "counts", batch_key: Optional[str] = None,
+                     scvi_model_type: Optional[Union[Type[scvi.model.SCVI], Type[scvi.model.LinearSCVI]]] = None,
+                     model_kwargs: Optional[Dict] = None, trainer_kwargs: Optional[Dict] = None) -> Union[
+    scvi.model.SCVI, scvi.model.LinearSCVI]:
+    scvi_model_type = scvi.model.SCVI if scvi_model_type is None else scvi_model_type
+
+    model_kwargs = {} if model_kwargs is None else model_kwargs
+    trainer_kwargs = {} if trainer_kwargs is None else trainer_kwargs
+
+    default_model_kwargs = {
+        "n_latent": 10,
+        "n_layers": 2,
+        "dropout_rate": 0.2,
+        "deeply_inject_covariates": True
+    }
+    default_trainer_kwargs = {
+        "batch_size": 256,
+        "early_stopping": True
+    }
+
+    default_model_kwargs.update(model_kwargs)
+    default_trainer_kwargs.update(trainer_kwargs)
+
+    scvi_model_type.setup_anndata(
         adata_train,
         layer=counts_layer,
         batch_key=batch_key,
     )
-    model = scvi.model.SCVI(adata_train, n_latent=20, n_layers=2, dropout_rate=0.2, deeply_inject_covariates=True)
-
-    model.train(batch_size=256, early_stopping=True)
+    model = scvi_model_type(adata_train, **default_model_kwargs)
+    model.train(**default_trainer_kwargs)
     return model
 
 
