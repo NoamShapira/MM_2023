@@ -1,7 +1,10 @@
 import warnings
+from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
+
+from data_loading.utils import load_dataframe_from_file
 
 
 def merge_transcriptom_data_to_raw_hospital(transcriptome_dataset: pd.DataFrame,
@@ -17,7 +20,7 @@ def merge_transcriptom_data_to_raw_hospital(transcriptome_dataset: pd.DataFrame,
     if transcriptome_dataset_patient_id_col_name is not None:
         dataset = dataset.set_index("PID")
 
-    ## add post treatment columns
+    # add post treatment columns
     post_treatment_cols = [col for col in raw_hospital_dataset.columns if ".2" in col]
     # add fish_columns
     fish_cols = [col for col in raw_hospital_dataset.columns if
@@ -28,7 +31,7 @@ def merge_transcriptom_data_to_raw_hospital(transcriptome_dataset: pd.DataFrame,
         ["Code"] + post_treatment_cols + fish_cols].set_index("Code")
     dataset = dataset.merge(post_treatment_data, how="left", left_index=True, right_index=True, validate="one_to_one")
 
-    ## add data to TAL_3 patients
+    # add data to TAL_3 patients
     TAL3_patients = [code for code in dataset.index if "P" == code[0]]
     dataset.loc[TAL3_patients, "Stage"] = 3
     dataset.loc[TAL3_patients, "Lenalidomide"] = 2
@@ -101,6 +104,61 @@ def add_response_columns_to_drug_combination(dataset: pd.DataFrame, combination:
     df[f"{combination}_response"] = response_series
 
     return df
+
+
+def load_and_process_clinical_data(clinical_data_path: Path, code_lower_case: bool, get_treatment_history: bool,
+                                   get_hospital_stage: bool, get_post_treatment: bool,
+                                   additional_cols: Optional[List[str]] = None,
+                                   treatment_names: Optional[List[str]] = None):
+    clinical_data = load_dataframe_from_file(clinical_data_path)
+    if code_lower_case:
+        clinical_data['Code'] = clinical_data['Code'].str.lower()
+
+    requested_cols = []
+    requested_cols += ["Code", "Biopsy sequence No."]
+    if treatment_names is None:
+        treatment_names = ["Bortezomib", "Ixazomib", "Carfilzomib", "Lenalidomide", "Thalidomide", "Pomalidomide",
+                           "Cyclophosphamide", "Chemotherapy", "Venetoclax", "Dexamethasone", "Prednisone",
+                           "Daratumumab", "Elotuzumab", "Belantamab", "Talquetamab", "Teclistamab", "Cevostamab",
+                           "Selinexor", "Auto-SCT", "CART", "BiTE-BCMA"]
+
+    if get_hospital_stage:
+        hospital_stage = 'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None)'
+        generated_hospital_stage = 'Disease Stage Hospital'
+        if hospital_stage in clinical_data.columns:
+            hospital_stage_map = {0: 'NDMM',
+                                  1: "RRMM",
+                                  2: "SMM",
+                                  3: "MGUS",
+                                  4: "AL", 5: "AL",
+                                  6: "MGUS", 7: "MGUS",
+                                  8: None}
+        else:  # new version of clinical data
+            hospital_stage = 'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None, 10=Naïve_NDMM)'
+            hospital_stage_map = {0: 'NDMM',
+                                  1: "RRMM",
+                                  2: "SMM",
+                                  3: "MGUS",
+                                  4: "AL", 5: "AL",
+                                  6: "MGUS", 7: "MGUS",
+                                  8: None,
+                                  10: 'Naive_NDMM'}
+        clinical_data[generated_hospital_stage] = clinical_data[hospital_stage].map(hospital_stage_map)
+
+        requested_cols += [generated_hospital_stage]
+    if get_treatment_history:
+        requested_cols += treatment_names
+    if get_post_treatment:
+        requested_cols += [f"{treatment}.2" for treatment in treatment_names]
+
+    if additional_cols is not None:
+        for col in additional_cols:
+            if col not in clinical_data.columns:
+                raise ValueError(f"{col} is requested but not in clinical data")
+            else:
+                requested_cols.append(col)
+    requested_clinical_data = clinical_data[requested_cols]
+    return requested_clinical_data
 
 
 def add_response_columns_to_specific_treatment(dataset: pd.DataFrame, treatment: str,
