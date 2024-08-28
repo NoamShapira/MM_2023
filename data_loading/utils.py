@@ -49,17 +49,22 @@ def merge_labels_to_adata(adata: ad.AnnData, labels_df: pd.DataFrame, col_in_ada
     return new_adata
 
 
-def extract_samples_metadata(adata: ad.AnnData, metadata_cols, split_by_method=True, generate_architype_id=True,
+def extract_samples_metadata(adata: ad.AnnData, metadata_cols, split_by_method=True, split_by_sample=True,
+                             generate_architype_id=True, generate_hl_architype_id=True, generate_sample_level_ids=False,
                              code_lower_case=True):
-    groupby_cols = ['Hospital.Code', 'Biopsy.Sequence']
+    groupby_cols = ['Hospital.Code']
     if split_by_method:
         groupby_cols.append('Method')
 
+    if split_by_sample:
+        groupby_cols.append('Biopsy.Sequence')
+    else:
+        metadata_cols.append('Biopsy.Sequence')
+
     metadata_cols = [col for col in metadata_cols if col not in groupby_cols]
-    all_samples = adata.obs.groupby(groupby_cols)[metadata_cols].agg(pd.Series.mode).dropna()
+    all_samples = adata.obs.groupby(groupby_cols)[metadata_cols].agg(lambda x: pd.Series.mode(x).iloc[0]).dropna()
     all_samples.columns.name = None
     all_samples = all_samples.reset_index()
-    all_samples['Hospital.Code'] = all_samples['Hospital.Code'].str.lower()
     if code_lower_case:
         all_samples['Hospital.Code'] = all_samples['Hospital.Code'].str.lower()
 
@@ -68,9 +73,23 @@ def extract_samples_metadata(adata: ad.AnnData, metadata_cols, split_by_method=T
             raise ValueError(
                 "cannot create architype id with seperation of samples by method, use split_by_method=True")
         all_samples['PID'] = 'z.' + all_samples['Method'].astype(str) + '_malignant_' + all_samples[
-            'Hospital.Code'].astype(
-            str)
+            'Hospital.Code'].astype(str)
         all_samples['PID'] = all_samples['PID'].str.lower()
+        if generate_sample_level_ids:
+            all_samples['SID'] = 'z.' + all_samples['Method'].astype(str) + '_malignant_' + \
+                                 all_samples['Hospital.Code'].astype(str) + '_' + all_samples['Biopsy.Sequence'].astype(str)
+            all_samples['SID'] = all_samples['SID'].str.lower()
+    if generate_hl_architype_id:
+        if not split_by_method:
+            raise ValueError(
+                "cannot create architype id with seperation of samples by method, use split_by_method=True")
+        all_samples['PID_Healthy_Like'] = 'z.' + all_samples['Method'].astype(str) + '_healthy_like_' + all_samples[
+            'Hospital.Code'].astype(str)
+        all_samples['PID_Healthy_Like'] = all_samples['PID_Healthy_Like'].str.lower()
+        if generate_sample_level_ids:
+            all_samples['SID_Healthy_Like'] = 'z.' + all_samples['Method'].astype(str) + '_healthy_like_' + \
+                                 all_samples['Hospital.Code'].astype(str) + '_' + all_samples['Biopsy.Sequence'].astype(str)
+            all_samples['SID_Healthy_Like'] = all_samples['SID_Healthy_Like'].str.lower()
 
     all_samples['Biopsy.Sequence'] = all_samples['Biopsy.Sequence'].astype(int)
 
@@ -93,7 +112,6 @@ def get_updated_disease_col(metadata_df: pd.DataFrame, disease_col: str, hospita
         new_disease_col[non_naive_NDMM_mask] = non_naive_NDMM_value
 
     if remove_PRMM:
-        new_disease_col = metadata_df.apply(
-            lambda row: "RRMM" if row[disease_col] == "PRMM" else row[disease_col], axis=1)
+        new_disease_col = new_disease_col.apply(lambda x: "RRMM" if x == "PRMM" else x)
 
     return new_disease_col

@@ -69,6 +69,70 @@ DEFAULT_RESPONSE_CODING = {
 }
 
 
+def load_and_process_clinical_data(clinical_data_path: Path, code_lower_case: bool,  get_treatment_history: bool,
+                                   get_hospital_stage: bool, get_post_treatment: bool, get_combination_exposure: bool,
+                                   get_pfs_data: bool,
+                                   additional_cols: Optional[List[str]] = None,
+                                   treatment_names: Optional[List[str]] = None):
+    clinical_data = load_dataframe_from_file(clinical_data_path)
+    if code_lower_case:
+        clinical_data['Code'] = clinical_data['Code'].str.lower()
+
+    requested_cols = []
+    requested_cols += ["Code", "Biopsy sequence No."]
+    if treatment_names is None:
+        treatment_names = ["Bortezomib", "Ixazomib", "Carfilzomib", "Lenalidomide", "Thalidomide", "Pomalidomide",
+                           "Cyclophosphamide", "Chemotherapy", "Venetoclax", "Dexamethasone", "Prednisone",
+                           "Daratumumab", "Elotuzumab", "Belantamab", "Talquetamab", "Teclistamab", "Cevostamab",
+                           "Selinexor", "Auto-SCT", "CART"]  # "BiTE-BCMA" - has no post data
+
+    if get_hospital_stage:
+        hospital_stage = 'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None)'
+        generated_hospital_stage = 'Disease Stage Hospital'
+        if hospital_stage in clinical_data.columns:
+            hospital_stage_map = {0: 'NDMM',
+                                  1: "RRMM",
+                                  2: "SMM",
+                                  3: "MGUS",
+                                  4: "AL", 5: "AL",
+                                  6: "MGUS", 7: "MGUS",
+                                  8: None}
+        else:  # new version of clinical data
+            hospital_stage = 'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None, 10=Naïve_NDMM)'
+            hospital_stage_map = {0: 'non_naive_NDMM',
+                                  1: "RRMM",
+                                  2: "SMM",
+                                  3: "MGUS",
+                                  4: "AL", 5: "AL",
+                                  6: "MGUS", 7: "MGUS",
+                                  8: None,
+                                  10: 'NDMM'}
+        clinical_data[generated_hospital_stage] = clinical_data[hospital_stage].map(hospital_stage_map)
+
+        requested_cols += [generated_hospital_stage]
+    if get_treatment_history:
+        requested_cols += treatment_names
+    if get_post_treatment:
+        requested_cols += [f"{treatment}.2" for treatment in treatment_names]
+    if get_combination_exposure:
+        requested_cols += [
+            "Triple Ref.", "Triple Exp.",
+            "Penta Ref.", "Penta Exp.",
+            "Belantamab", "Belantamab Ref"
+        ]
+    if get_pfs_data:
+        requested_cols += [' PFS (Months)', 'PFS Event']
+
+    if additional_cols is not None:
+        for col in additional_cols:
+            if col not in clinical_data.columns:
+                raise ValueError(f"{col} is requested but not in clinical data")
+            else:
+                requested_cols.append(col)
+    requested_clinical_data = clinical_data[requested_cols]
+    return requested_clinical_data
+
+
 def add_response_columns_to_drug_combination(dataset: pd.DataFrame, combination: str,
                                              response_policy: str, no_response_policy: str,
                                              coding: Optional[dict] = None,
@@ -104,61 +168,6 @@ def add_response_columns_to_drug_combination(dataset: pd.DataFrame, combination:
     df[f"{combination}_response"] = response_series
 
     return df
-
-
-def load_and_process_clinical_data(clinical_data_path: Path, code_lower_case: bool, get_treatment_history: bool,
-                                   get_hospital_stage: bool, get_post_treatment: bool,
-                                   additional_cols: Optional[List[str]] = None,
-                                   treatment_names: Optional[List[str]] = None):
-    clinical_data = load_dataframe_from_file(clinical_data_path)
-    if code_lower_case:
-        clinical_data['Code'] = clinical_data['Code'].str.lower()
-
-    requested_cols = []
-    requested_cols += ["Code", "Biopsy sequence No."]
-    if treatment_names is None:
-        treatment_names = ["Bortezomib", "Ixazomib", "Carfilzomib", "Lenalidomide", "Thalidomide", "Pomalidomide",
-                           "Cyclophosphamide", "Chemotherapy", "Venetoclax", "Dexamethasone", "Prednisone",
-                           "Daratumumab", "Elotuzumab", "Belantamab", "Talquetamab", "Teclistamab", "Cevostamab",
-                           "Selinexor", "Auto-SCT", "CART", "BiTE-BCMA"]
-
-    if get_hospital_stage:
-        hospital_stage = 'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None)'
-        generated_hospital_stage = 'Disease Stage Hospital'
-        if hospital_stage in clinical_data.columns:
-            hospital_stage_map = {0: 'NDMM',
-                                  1: "RRMM",
-                                  2: "SMM",
-                                  3: "MGUS",
-                                  4: "AL", 5: "AL",
-                                  6: "MGUS", 7: "MGUS",
-                                  8: None}
-        else:  # new version of clinical data
-            hospital_stage = 'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None, 10=Naïve_NDMM)'
-            hospital_stage_map = {0: 'NDMM',
-                                  1: "RRMM",
-                                  2: "SMM",
-                                  3: "MGUS",
-                                  4: "AL", 5: "AL",
-                                  6: "MGUS", 7: "MGUS",
-                                  8: None,
-                                  10: 'Naive_NDMM'}
-        clinical_data[generated_hospital_stage] = clinical_data[hospital_stage].map(hospital_stage_map)
-
-        requested_cols += [generated_hospital_stage]
-    if get_treatment_history:
-        requested_cols += treatment_names
-    if get_post_treatment:
-        requested_cols += [f"{treatment}.2" for treatment in treatment_names]
-
-    if additional_cols is not None:
-        for col in additional_cols:
-            if col not in clinical_data.columns:
-                raise ValueError(f"{col} is requested but not in clinical data")
-            else:
-                requested_cols.append(col)
-    requested_clinical_data = clinical_data[requested_cols]
-    return requested_clinical_data
 
 
 def add_response_columns_to_specific_treatment(dataset: pd.DataFrame, treatment: str,
