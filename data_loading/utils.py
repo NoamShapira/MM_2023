@@ -107,7 +107,7 @@ def get_updated_disease_col(metadata_df: pd.DataFrame, disease_col: str, hospita
             treatment_names = ["Bortezomib", "Ixazomib", "Carfilzomib", "Lenalidomide", "Thalidomide", "Pomalidomide",
                                "Cyclophosphamide", "Chemotherapy", "Venetoclax", "Dexamethasone", "Prednisone",
                                "Daratumumab", "Elotuzumab", "Belantamab", "Talquetamab", "Teclistamab", "Cevostamab",
-                               "Selinexor", "Auto-SCT", "CART", "BiTE-BCMA"]
+                               "Selinexor", "Auto-SCT", "CART"]
         non_naive_NDMM_mask = (new_disease_col == "NDMM") & (metadata_df[treatment_names].any(axis=1))
         new_disease_col[non_naive_NDMM_mask] = non_naive_NDMM_value
 
