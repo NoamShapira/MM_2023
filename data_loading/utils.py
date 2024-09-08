@@ -49,6 +49,14 @@ def merge_labels_to_adata(adata: ad.AnnData, labels_df: pd.DataFrame, col_in_ada
     return new_adata
 
 
+def get_sample_level_data(adata_path: Path, clinical_data_path: Path, architypes_df: pd.DataFrame,
+                          sample_creation_kwargs: dict, clinical_loading_kwargs: dict):
+    adata = ad.read_h5ad(adata_path)
+    adata.obs['Hospital.Code'] = adata.obs['Hospital.Code'].apply(
+        lambda h_code: f"cart_p{h_code.replace('cart', '')}" if h_code in ('cart13', 'cart21') else h_code)
+    samples_df = extract_samples_metadata(adata, **sample_creation_kwargs)
+
+
 def extract_samples_metadata(adata: ad.AnnData, metadata_cols, split_by_method=True, split_by_sample=True,
                              generate_architype_id=True, generate_hl_architype_id=True, generate_sample_level_ids=False,
                              code_lower_case=True):
@@ -77,7 +85,8 @@ def extract_samples_metadata(adata: ad.AnnData, metadata_cols, split_by_method=T
         all_samples['PID'] = all_samples['PID'].str.lower()
         if generate_sample_level_ids:
             all_samples['SID'] = 'z.' + all_samples['Method'].astype(str) + '_malignant_' + \
-                                 all_samples['Hospital.Code'].astype(str) + '_' + all_samples['Biopsy.Sequence'].astype(str)
+                                 all_samples['Hospital.Code'].astype(str) + '_' + all_samples['Biopsy.Sequence'].astype(
+                str)
             all_samples['SID'] = all_samples['SID'].str.lower()
     if generate_hl_architype_id:
         if not split_by_method:
@@ -88,7 +97,8 @@ def extract_samples_metadata(adata: ad.AnnData, metadata_cols, split_by_method=T
         all_samples['PID_Healthy_Like'] = all_samples['PID_Healthy_Like'].str.lower()
         if generate_sample_level_ids:
             all_samples['SID_Healthy_Like'] = 'z.' + all_samples['Method'].astype(str) + '_healthy_like_' + \
-                                 all_samples['Hospital.Code'].astype(str) + '_' + all_samples['Biopsy.Sequence'].astype(str)
+                                              all_samples['Hospital.Code'].astype(str) + '_' + all_samples[
+                                                  'Biopsy.Sequence'].astype(str)
             all_samples['SID_Healthy_Like'] = all_samples['SID_Healthy_Like'].str.lower()
 
     all_samples['Biopsy.Sequence'] = all_samples['Biopsy.Sequence'].astype(int)
