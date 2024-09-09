@@ -308,6 +308,7 @@ def add_general_response(patient_df: pd.DataFrame, add_best_response: bool = Tru
 
         not_reliable_pfs = (~pfs_higher_then_thresh) & (time_from_biopsy_to_FU_months < pfs_thresh_months)
         patient_df[general_pfs_response_col][not_reliable_pfs] = 'no_data'
+        patient_df[general_pfs_response_col][patient_df[' PFS (Months)'].isna()] = 'no_data'
 
         patient_df[general_pfs_response_col] = patient_df[general_pfs_response_col].map(coding)
 

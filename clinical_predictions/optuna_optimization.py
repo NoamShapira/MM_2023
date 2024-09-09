@@ -16,7 +16,8 @@ from clinical_predictions.utils import balanced_subsample
 def classifiaction_cv_objective(trial, X_train, y_train, use_feature_selection: bool = False,
                                 try_balance_with_subsample: bool = False,
                                 classifier_names: Optional[List] = None, precision_alpha: float = 0.8):
-    classifier_names = classifier_names if classifier_names is not None else ['RandomForest', 'XGBoost',
+    classifier_names = classifier_names if classifier_names is not None else ['RandomForest',
+                                                                              # 'XGBoost',
                                                                               'LogisticRegression']  # ['LogisticRegression', 'SVC','RandomForest', 'XGBoost', 'LogisticRegression'])
     classifier_name = trial.suggest_categorical('classifier', classifier_names)
     if classifier_name == 'SVC':
@@ -28,7 +29,7 @@ def classifiaction_cv_objective(trial, X_train, y_train, use_feature_selection: 
         rf_max_samples = trial.suggest_categorical("rf_max_samples", [0.8])  # [None, 0.8]
         model = RandomForestClassifier(max_depth=rf_max_depth, n_estimators=rf_n_estimators, max_samples=rf_max_samples)
     elif classifier_name == 'LogisticRegression':
-        logistic_regression_c = trial.suggest_float('logistic_regression_c', 1e-4, 1e1, log=True)
+        logistic_regression_c = trial.suggest_float('logistic_regression_c', 1e-4, 1e2, log=True)
         logr_penalty = trial.suggest_categorical('logr_penalty', ["l1", "l2"])
         class_weight = trial.suggest_categorical('class_weight', [None, "balanced"])
         model = sklearn.linear_model.LogisticRegression(C=logistic_regression_c, penalty=logr_penalty,
@@ -37,7 +38,7 @@ def classifiaction_cv_objective(trial, X_train, y_train, use_feature_selection: 
         param = {
             'booster': trial.suggest_categorical('xgb_booster', ['gbtree', 'dart']),
             'n_estimators': trial.suggest_int('xgb_n_estimators', 2, 32, log=True),
-            'max_depth': trial.suggest_int('xgb_max_depth', 1, 4),
+            'max_depth': trial.suggest_int('xgb_max_depth', 1, 3),
             # 'alpha': trial.suggest_float('alpha', 1e-8, 1.0, log=True)
         }
         model = XGBClassifier(**param)
