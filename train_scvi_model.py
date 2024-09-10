@@ -21,11 +21,14 @@ def train_scvi_model(adata_train: ad.AnnData, counts_layer: str = "counts", batc
     default_model_kwargs = {
         "n_latent": 10,
         "n_layers": 2,
-        "dropout_rate": 0.2,
+        "dropout_rate": 0.1,
         "deeply_inject_covariates": True
     }
     default_trainer_kwargs = {
-        "batch_size": 256,
+        "batch_size": 512,
+        "max_epochs": 250,
+        "plan_kwargs": {"lr": 5e-3},
+        "check_val_every_n_epoch": 10,
         "early_stopping": True
     }
 

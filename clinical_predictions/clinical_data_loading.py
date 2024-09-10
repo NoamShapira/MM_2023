@@ -1,7 +1,10 @@
 import warnings
+from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
+
+from data_loading.utils import load_dataframe_from_file
 
 
 def merge_transcriptom_data_to_raw_hospital(transcriptome_dataset: pd.DataFrame,
@@ -17,7 +20,7 @@ def merge_transcriptom_data_to_raw_hospital(transcriptome_dataset: pd.DataFrame,
     if transcriptome_dataset_patient_id_col_name is not None:
         dataset = dataset.set_index("PID")
 
-    ## add post treatment columns
+    # add post treatment columns
     post_treatment_cols = [col for col in raw_hospital_dataset.columns if ".2" in col]
     # add fish_columns
     fish_cols = [col for col in raw_hospital_dataset.columns if
@@ -28,7 +31,7 @@ def merge_transcriptom_data_to_raw_hospital(transcriptome_dataset: pd.DataFrame,
         ["Code"] + post_treatment_cols + fish_cols].set_index("Code")
     dataset = dataset.merge(post_treatment_data, how="left", left_index=True, right_index=True, validate="one_to_one")
 
-    ## add data to TAL_3 patients
+    # add data to TAL_3 patients
     TAL3_patients = [code for code in dataset.index if "P" == code[0]]
     dataset.loc[TAL3_patients, "Stage"] = 3
     dataset.loc[TAL3_patients, "Lenalidomide"] = 2
@@ -64,6 +67,76 @@ DEFAULT_RESPONSE_CODING = {
     "no_response": "NR",
     "no_data": None
 }
+ALL_TREATMENTS = ["Bortezomib", "Ixazomib", "Carfilzomib", "Lenalidomide", "Thalidomide", "Pomalidomide",
+                  "Cyclophosphamide", "Chemotherapy", "Venetoclax", "Dexamethasone", "Prednisone",
+                  "Daratumumab", "Elotuzumab", "Belantamab", "Talquetamab", "Teclistamab", "Cevostamab",
+                  "Selinexor", "Auto-SCT", "CART"]  # "BiTE-BCMA" - has no post data
+
+
+def load_and_process_clinical_data(clinical_data_path: Path, code_lower_case: bool, get_treatment_history: bool,
+                                   get_hospital_stage: bool, get_post_treatment: bool, get_combination_exposure: bool,
+                                   get_pfs_data: bool, get_fish_data: bool = False,
+                                   additional_cols: Optional[List[str]] = None,
+                                   treatment_names: Optional[List[str]] = None):
+    clinical_data = load_dataframe_from_file(clinical_data_path)
+    if code_lower_case:
+        clinical_data['Code'] = clinical_data['Code'].str.lower()
+
+    requested_cols = []
+    requested_cols += ["Code", "Biopsy sequence No."]
+    if treatment_names is None:
+        treatment_names = ALL_TREATMENTS
+
+    if get_hospital_stage:
+        hospital_stage = 'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None)'
+        generated_hospital_stage = 'Disease Stage Hospital'
+        if hospital_stage in clinical_data.columns:
+            hospital_stage_map = {0: 'NDMM',
+                                  1: "RRMM",
+                                  2: "SMM",
+                                  3: "MGUS",
+                                  4: "AL", 5: "AL",
+                                  6: "MGUS", 7: "MGUS",
+                                  8: None}
+        else:  # new version of clinical data
+            hospital_stage = 'Plasma cell dyscrasia at Bx time(0=NDMM, 1=RRMM, 2=SMM 3=MGUS,4=NDAL, 5=RRAL, 6=NDSPC, 7=MGRS, 8=None, 10=Naïve_NDMM)'
+            hospital_stage_map = {0: 'non_naive_NDMM',
+                                  1: "RRMM",
+                                  2: "SMM",
+                                  3: "MGUS",
+                                  4: "AL", 5: "AL",
+                                  6: "MGUS", 7: "MGUS",
+                                  8: None,
+                                  10: 'NDMM'}
+        clinical_data[generated_hospital_stage] = clinical_data[hospital_stage].map(hospital_stage_map)
+
+        requested_cols += [generated_hospital_stage]
+    if get_treatment_history:
+        requested_cols += treatment_names
+    if get_post_treatment:
+        requested_cols += [f"{treatment}.2" for treatment in treatment_names]
+    if get_combination_exposure:
+        requested_cols += [
+            "Triple Ref.", "Triple Exp.",
+            "Penta Ref.", "Penta Exp.",
+            "Belantamab", "Belantamab Ref"
+        ]
+    if get_pfs_data:
+        requested_cols += [' PFS (Months)', 'PFS Event', 'Biopsy date', 'Progression date', 'Last FU Date']
+
+    if get_fish_data:
+        fish_cols = [col for col in clinical_data.columns
+                     if "t(" in col or "del(" in col or col in ['1q21+', 'IGH rearrangement',
+                                                                'Cytogenetics Risk (0=standard risk, 1=single hit, 2=2+ hits)']]
+        requested_cols += fish_cols
+    if additional_cols is not None:
+        for col in additional_cols:
+            if col not in clinical_data.columns:
+                raise ValueError(f"{col} is requested but not in clinical data")
+            else:
+                requested_cols.append(col)
+    requested_clinical_data = clinical_data[requested_cols]
+    return requested_clinical_data
 
 
 def add_response_columns_to_drug_combination(dataset: pd.DataFrame, combination: str,
@@ -165,3 +238,78 @@ def add_response_columns_to_specific_treatment(dataset: pd.DataFrame, treatment:
         warnings.warn(warn)
 
     return df
+
+
+def add_Kydar_response(df_with_clinical_data: pd.DataFrame, number_of_months: int = 4, coding: Optional[dict] = None):
+    if coding is None:
+        coding = DEFAULT_RESPONSE_CODING
+    kydar_mask = df_with_clinical_data["Project"] == "Kydar"
+    enough_pfs_mask = df_with_clinical_data[" PFS (Months)"] >= number_of_months
+
+    kydar_response = 'Kydar_response'
+    df_with_clinical_data[kydar_response] = coding['no_data']
+    df_with_clinical_data[kydar_response][kydar_mask & enough_pfs_mask] = coding['response']
+    df_with_clinical_data[kydar_response][kydar_mask & (~enough_pfs_mask)] = coding['no_response']
+    return df_with_clinical_data
+
+
+def add_CART_response(patient_df: pd.DataFrame, full_clinical_df: pd.DataFrame, pfs_policy="9M PFS",
+                      coding: Optional[dict] = None):
+    if coding is None:
+        coding = DEFAULT_RESPONSE_CODING
+
+    if pfs_policy not in ("9M PFS", "6M PFS", '3M PFS'):
+        raise ValueError()
+    df = patient_df.copy()
+
+    CART_response_col = 'CART_response'
+    full_clinical_df["Hospital.Code"] = full_clinical_df["Pt No."].apply(
+        lambda x: f"CART_P{x}" if len(str(x)) == 2 else f"CART_P0{x}").str.lower()
+    full_clinical_df[CART_response_col] = full_clinical_df[pfs_policy]
+    full_clinical_df[CART_response_col] = full_clinical_df[CART_response_col].map(
+        {1: coding['response'], 0: coding['no_response']})
+
+    if CART_response_col in df.columns:
+        df = df.drop(columns=CART_response_col)
+    df = df.merge(full_clinical_df[["Hospital.Code", CART_response_col]], how='left', on="Hospital.Code")
+    return df
+
+
+def add_general_response(patient_df: pd.DataFrame, add_best_response: bool = True, add_pfs: bool = True,
+                         pfs_thresh_months=9, coding: Optional[dict] = None):
+    patient_df = patient_df.copy()
+    _DAYS_A_MONTH = 30.4
+
+    if coding is None:
+        coding = DEFAULT_RESPONSE_CODING
+    if not (add_best_response or add_pfs):
+        raise ValueError("must generate at least one of the respnses: best_response and/or pfs")
+    if add_best_response:
+        general_response_col = 'general_response'
+        post_treatment_cols = [f'{treatment}.2' for treatment in ALL_TREATMENTS]
+        patient_df[general_response_col] = (patient_df[post_treatment_cols] == 4).any(axis=1).map(
+            {True: 'response', False: 'no_response'})
+        patients_with_post_data = patient_df[post_treatment_cols].any(axis=1)
+        patient_df[general_response_col][~patients_with_post_data] = 'no_data'
+
+        patient_df[general_response_col] = patient_df[general_response_col].map(coding)
+    if add_pfs:
+        general_pfs_response_col = 'general_pfs_response'
+        progression_date_map = {"25/02//2019": "25/02/2019", '13/082018': '13/08/2018'}  # manual typos correction
+        patient_df['Progression date'] = patient_df['Progression date'].apply(
+            lambda x: progression_date_map[x] if x in progression_date_map else x)
+
+        time_from_biopsy_to_FU = pd.to_datetime(patient_df['Last FU Date']) - pd.to_datetime(patient_df['Biopsy date'])
+        time_from_biopsy_to_FU_months = time_from_biopsy_to_FU.apply(lambda x: x.days / _DAYS_A_MONTH)
+
+        pfs_higher_then_thresh = patient_df[' PFS (Months)'] > pfs_thresh_months
+        patient_df[general_pfs_response_col] = pfs_higher_then_thresh.map(
+            {True: 'response', False: 'no_response'})
+
+        not_reliable_pfs = (~pfs_higher_then_thresh) & (time_from_biopsy_to_FU_months < pfs_thresh_months)
+        patient_df[general_pfs_response_col][not_reliable_pfs] = 'no_data'
+        patient_df[general_pfs_response_col][patient_df[' PFS (Months)'].isna()] = 'no_data'
+
+        patient_df[general_pfs_response_col] = patient_df[general_pfs_response_col].map(coding)
+
+    return patient_df

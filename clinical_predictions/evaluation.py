@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from sklearn.base import ClassifierMixin
-from sklearn.metrics import classification_report, accuracy_score
+from sklearn.metrics import classification_report, accuracy_score, f1_score
 
 
 @dataclass
@@ -18,7 +18,7 @@ class ExperimentData:
 
 
 def train_and_eval_model(X_train, X_test, y_train, y_test, model, extra_for_report=None,
-                         baseline="RANDOM_CHOICE") -> ExperimentData:
+                         baseline="RANDOM_CHOICE", base_line_n_test: int = 10) -> ExperimentData:
     model.fit(X_train, y_train)
     y_pred = pd.Series(model.predict(X_test))
     report = {}
@@ -26,10 +26,19 @@ def train_and_eval_model(X_train, X_test, y_train, y_test, model, extra_for_repo
         report["extra"] = extra_for_report
 
     if baseline == "RANDOM_CHOICE":
-        probas = y_train.value_counts(normalize=True)
-        y_pred_baseline = np.random.choice(len(probas), len(y_test), p=[probas.loc[0], probas.loc[1]])
+        if base_line_n_test < 1:
+            raise ValueError('baseline number of iterations must be larger than 1')
+        running_accuracy = 0
+        running_f1_score = 0
+        for _ in range(base_line_n_test):
+            probas = y_train.value_counts(normalize=True)
+            y_pred_baseline = np.random.choice(len(probas), len(y_test), p=[probas.loc[0], probas.loc[1]])
+            running_accuracy += accuracy_score(y_true=y_test, y_pred=y_pred_baseline)
+            running_f1_score += f1_score(y_true=y_test, y_pred=y_pred_baseline)
+
         report["baseline"] = classification_report(y_true=y_test, y_pred=y_pred_baseline, output_dict=True)
-        report["baseline"]['1']["accuracy"] = accuracy_score(y_true=y_test, y_pred=y_pred_baseline)
+        report["baseline"]['1']["accuracy"] = running_accuracy / base_line_n_test
+        report["baseline"]['1']["f1-score"] = running_f1_score / base_line_n_test
 
     report.update(classification_report(y_true=y_test, y_pred=y_pred, output_dict=True))
     report['1']["accuracy"] = accuracy_score(y_true=y_test, y_pred=y_pred)

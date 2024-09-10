@@ -2,7 +2,6 @@ import argparse
 import logging
 import os
 import sys
-from pathlib import Path
 
 import anndata as ad
 from omegaconf import OmegaConf, DictConfig
