@@ -5,5 +5,11 @@ xgboost
 omegaconf
 leidenalg
 pyreadr
-scipy=1.12.0
+scikit-learn
+scipy==1.12.0
 xlrd
+scvi-tools
+notebook
+plotly==5.24.1
+openpyxl
+lifelines
